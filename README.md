@@ -1,5 +1,7 @@
 # Python_MessageEncoder
-This simple script creates an encoded message that can be decoded with a code sample the script provides
+This simple script creates an encoded message that can be decoded with a code sample the script provides.
+This uses the seed functionality in python random library.
+
 ## Usage
 ```
 usage: encode.py [-h] [--file FILE] [--msg MSG] [--seed SEED] [--size SIZE] [--char_range CHAR_RANGE] [--output OUTPUT] [--garbage GARBAGE]
@@ -16,7 +18,7 @@ options:
   -o, --output      Specify a text file where the output code will be saved
   -g, --garbage     Seed for garbage values
 ```
-##Example
+## Example
 ```
 python encode.py -m message -c 256 -g garbage_seed
 python encode.py -f file -s seed -c 256 -z 3 -o out.py
