@@ -1,51 +1,35 @@
 """
-This script is a command line utility which takes the folllowing arguments:
-    -h, --help        show this help message and exit
-    -f, --file        Specify a text file whose contents are to be encoded
-    -m, --msg         The text to be encoded
-    -s, --seed        The seed for encoding [default:random]
-    -z, --size        The size_seed for encoding [default:2]
-                          It determines how large to make the encoded string.
-                          The encoded message is "roughly" 'size_seed' times the length of actual message
-    -c, --char_range  The range of unicode characters to be used for encoded the message [default:256]
-    -o, --output      Specify a text file where the output code will be saved
-    -g, --garbage     Seed for garbage values
+`python encode.py -h` for help message
 It encodes a given message (or contents of a given file) and provides a python code to extract the original message
 It uses python random module and XOR (^) operator to encode the message
 """
-
 
 from random import Random
 from typing import Any
 
 
 def encode(
-    message: str = "",
+    message: str,
     seed: Any = 0,
     size_seed: int = 2,
     char_range: int = 256,
     garbage_seed: Any = None,
-) -> tuple[str, Any, int, int]:
+) -> str:
     """\
-    This function encodes the given message
+    Encodes the given message
     The feild 'seed' is the seed for randomisation.
     The feild 'size_seed' determines how large to make the encoded string
         The encoded message is "roughly" 'size_seed' times the length of actual message
     The feild 'char_range' determines the range of unicode characters to be used for encoded the message
-        NOTE: The same 'seed', 'size_seed' and 'char_range' has to be used while decoding
-        P.S. Yes I do take care of that by default
     The feild 'garbage_seed' is the seed for garbage values.
         If you intend to get the same encoded message again pass same value to this feild.
+    NOTE: The same 'seed', 'size_seed' and 'char_range' values are required for decoding
     """
-    if seed is None:
-        seed = 0
     temp = Random(garbage_seed)
     determined = Random(seed)
     result = ""
     i = 0
     n = len(message)
-    if size_seed < 2:
-        size_seed = 2
     while i < n:
         char = message[i]
         if not determined.randrange(size_seed):
@@ -53,17 +37,33 @@ def encode(
             result += chr(determined.randrange(char_range) ^ ord(char))
         else:
             result += chr(temp.randrange(char_range))
-    return result.encode().hex().upper(), seed, size_seed, char_range
+    return result.encode().hex().upper()
+
+
+def validate(
+    seed: Any = 0,
+    size_seed: int = 2,
+    char_range: int = 256,
+) -> tuple[Any, int, int]:
+    """
+    Validate the values passed by the user
+    If seed is None, then the encryption will not be consistent and the algorithm will fail
+    """
+    if seed is None: seed = 0
+    size_seed = max(size_seed, 1)
+    if char_range < 1: char_range = 256
+    return seed, size_seed, char_range
 
 
 def decode(
-    encoded: str = "",
+    encoded: str,
     seed: Any = 0,
     size_seed: int = 2,
     char_range: int = 256,
 ) -> str:
     """\
     Decodes the encoded message based on the given parameters
+    Please use the same values of 'seed', 'size_seed' and 'char_range' as used while encoding
     """
     determined = Random(seed)
     # return "".join((chr(determined.randrange(char_range) ^ ord(char)) for char in bytes.fromhex(encoded).decode() if not determined.randrange(size_seed)))
@@ -74,21 +74,17 @@ def decode(
     return message
 
 
-def give_code(
-    code: str = "",
-    seed: Any = 0,
-    size_seed: int = 2,
-    char_range: int = 256,
-) -> str:
+def give_code(encoded_message: str, seed: Any, size_seed: int, char_range: int) -> str:
     """\
     This function gives the python code that can be used to decode the message based on given parameters
     """
-    return f"""\
-import random
-random.seed({seed!r})
-m = {code!r}
+    return f"""import random; random.seed({seed!r}); m = {encoded_message!r}
 print(''.join((chr(random.randrange({char_range})^ord(c))for c in bytes.fromhex(m).decode()if not random.randrange({size_seed}))))
 """
+
+
+def give_values(encoded_message: str, seed: Any, size_seed: int, char_range: int) -> str:
+    return f"message:\t{encoded_message}\nseed:\t\t{seed}\nsize seed:\t{size_seed}\nchar range:\t{char_range}"
 
 
 def get_input():
@@ -96,18 +92,17 @@ def get_input():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--file",
-        "-f",
+        "arg",
         type=str,
         default="",
-        help="Specify a text file whose contents are to be encoded",
+        help="The text to be encoded, or the path of the file if -f flag is set",
     )
     parser.add_argument(
-        "--msg",
-        "-m",
-        type=str,
-        default="",
-        help="The text to be encoded",
+        "--file",
+        "-f",
+        action="store_true",
+        default=False,
+        help="If the argument is a file",
     )
     parser.add_argument(
         "--seed",
@@ -124,7 +119,7 @@ def get_input():
     )
     parser.add_argument(
         "--char_range",
-        "-c",
+        "-r",
         type=int,
         default="256",
         help="The range of unicode characters to be used for encoded the message [default:256]",
@@ -142,40 +137,59 @@ def get_input():
         default=None,
         help="Seed for garbage values",
     )
+    parser.add_argument(
+        "--values-only",
+        "-vo",
+        default=False,
+        action="store_true",
+        help="Give values only, not the entire code",
+    )
     return parser.parse_args()
 
 
-def main(args):
-    message = ""
-    if args.msg:
-        message = args.msg
+def _extract_message(args) -> str | int:
+    if args.file:
+        try:
+            with open(args.arg) as f:
+                message = f.read()
+        except FileNotFoundError:
+            print("File does not exist")
+            return -1
     else:
-        if args.file:
-            try:
-                with open(args.file) as f:
-                    message = f.read()
-            except FileNotFoundError:
-                print("File does not exist")
-                exit()
-        else:
-            print("No Arguments Given")
-            exit()
+        message = args.arg
+    return message if message else -1
 
-    temp = give_code(
-        *encode(
-            message=message,
-            seed=args.seed,
-            size_seed=args.size_seed,
-            char_range=args.char_range,
-            garbage_seed=args.garbage_seed,
-        )
+
+def _extract_keys(args):
+    seed, size_seed, char_range = validate(args.seed, args.size, args.char_range)
+    try: garbage_seed = args.garbage
+    except: garbage_seed = None
+    return seed, size_seed, char_range, garbage_seed
+
+
+def run(args):
+    message = _extract_message(args)
+    if message == -1:  # file does not exist or empty file
+        print("No message to encode")
+        return
+
+    # keys = (seed, size_seed, char_range)
+    *keys, garbage_seed = _extract_keys(args)
+    encoded_message = encode(message, *keys, garbage_seed)
+
+    output_tuple = (encoded_message, *keys)
+    output = (
+        give_values(*output_tuple) if args.values_only else give_code(*output_tuple)
     )
     if args.output:
-        with open(args.output, "w") as f:
-            f.write(temp)
+        try:
+            with open(args.output, "w") as f:
+                f.write(output)
+        except Exception as err:
+            print(f"Error occured while writing to file: {err}")
     else:
-        print("\n\n", temp, sep="\n")
+        print(f"\n{output}")
 
 
 if __name__ == "__main__":
-    main(get_input())
+    run(get_input())
